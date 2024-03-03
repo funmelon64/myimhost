@@ -2,7 +2,7 @@ const PORT = 8081;
 const ENABLE_AUTH = false;
 const USER = 'morph';
 const PASS = 'ss1488228';
-const DATA_DIR = "./data/"; // must be with slash at the end and be absolute path in your's system FS
+const DATA_DIR = "../data/"; // must be with slash at the end and be absolute path in your's system FS
 
 import {access, mkdir, opendir} from 'fs/promises';
 import {fileTypeFromBuffer} from 'file-type';
@@ -27,7 +27,7 @@ if (ENABLE_AUTH) {
 
 async function ProgInit() {
     if (DATA_DIR[DATA_DIR.length-1] != '/') {
-        console.log('[ERROR]: Please specify DATA_DIR with slash at the end.');
+        console.error('[ERROR]: Please specify DATA_DIR with slash at the end.');
         return;
     }
 
@@ -35,16 +35,11 @@ async function ProgInit() {
         await access(DATA_DIR);
     } catch (e) {
         if (e.message.includes("no such file or directory")) {
-            try {
-                await mkdir(DATA_DIR);
-            } catch (e) {
-                console.error("Creating data folder error [%s]: [%s]", e.name, e.message);
-                return;
-            }
+            console.error("[ERROR]: data folder is not exists");
         } else {
-            console.log("data folder access error [%s]: [%s]", e.name, e.message);
-            return;
+            console.error("[ERROR]: data folder access error [%s]: [%s]", e.name, e.message);
         }
+        return;
     }
 
     let expressApp = express();
@@ -61,8 +56,6 @@ ProgInit();
 function CreateExpressRoutes(app) {
     app.use("/upload", htAuth, express.static(("./public")));
     app.use('/', redirectToUploadOrNext, express.static(DATA_DIR));
-    app.use(express.json());
-    app.use(express.urlencoded({ extended: true }));
 
     app.use(fileUpload({
         //limits: { fileSize: 50 * 1024 * 1024 },
@@ -130,43 +123,40 @@ async function getNotExistedRandomFilename(folder, fileSuffix) {
 }
 
 async function uploadFiles(req, res) {
-    try {
-        function isValidFolder(str) {
-            return  (typeof(str) == 'string' &&
-                    str.length < 65 && 
-                    str.match(/\W/gm) == null);
+    function isValidFolder(str) {
+        return  (typeof(str) == 'string' &&
+                str.length < 65 && 
+                str.match(/\W/gm) == null);
+    }
+
+    function isValidFilename(str) {
+        return  (typeof(str) == 'string' &&
+                str.length < 65 && 
+                str.match(/[^a-zA-Z\d.\-\_]|\.{2,}/gm) == null);
+    }
+
+    function UploadError(httpErrCode, message) {
+        self.code = httpErrCode;
+        self.message = message;
+    }
+
+    try {    
+        if (!req.files || !req.files.file) {
+            throw new UploadError(400, 'File in parameter "file" not attached');
         }
 
-        function isValidFilename(str) {
-            return  (typeof(str) == 'string' &&
-                    str.length < 65 && 
-                    str.match(/[^a-zA-Z\d.\-\_]|\.{2,}/gm) == null);
-        }
-
-        if (!req.files) { 
-            res.send("No files found");
-            res.status(400).end();
-            return;
-        }
+        let file = req.files.file;
 
         const reqFolder = req.body["folder"];
         const reqName = req.body["name"];
-        const reqNotUseExt = req.body["dont-use-ext"];
-        
-        let file = req.files.file;
-        if (!file) {
-            res.send("File not attached");
-            res.status(400).end();
-            return;
-        }
+        const reqDontUseExt = req.body["dont-use-ext"];
 
         let fileDir = '';
+        
         if (reqFolder) {
-            if (!isValidFolder(reqFolder)) {
-                res.send("Folder is not valid");
-                res.status(400).end();
-                return;
-            }
+            if (!isValidFolder(reqFolder))
+                throw new UploadError(400, '"folder" parameter is not valid');
+            
             fileDir = reqFolder;
         }
 
@@ -181,19 +171,14 @@ async function uploadFiles(req, res) {
                         await mkdir(DATA_DIR + '/' + fileDir);
                     } 
                     catch (e) {
-                        console.error("Creating folder error [%s]: [%s]", e.name, e.message);
-                        res.send('[${e.name}]: ${e.message}');
-                        res.status(500).end();
-                        return;
+                        throw new UploadError(500, 'Creating folder error [{e.name}]: {e.message}');
                     }
                 } else {
-                    console.log("folder access error [%s]: [%s]", e.name, e.message);
-                    res.send('[${e.name}]: ${e.message}');
-                    res.status(500).end();
-                    return;
+                    throw new UploadError(500, 'Folder access error [{e.name}]: {e.message}');
                 }
             }
 
+            // todo: duplicate of action above, that i wasn't fixed
             if (! await isFileExists(DATA_DIR + '/' + fileDir)) {
                 await mkdir(DATA_DIR + '/' + fileDir);
             }
@@ -201,7 +186,7 @@ async function uploadFiles(req, res) {
 
         let extSuffix = '';
 
-        if (reqNotUseExt == 'false') {
+        if (reqDontUseExt == 'false') {
             let fileTypeInfo = await fileTypeFromBuffer(file.data);
             if (fileTypeInfo) {
                 extSuffix = '.' + fileTypeInfo.ext;
@@ -244,12 +229,23 @@ async function uploadFiles(req, res) {
             res.status(500).end();
         }
 
-        res.send(fileDir + '/' + fileName);
+        if (fileDir != '')
+            res.send('/' + fileDir + '/' + fileName);
+        else
+            res.send('/' + fileName);
+
         res.status(200).end();
     }
     catch (e) {
-        console.log("[uploadFile ERROR]: ", e);
-        res.send(e);
-        res.status(500).end();
+        if (e instanceof UploadError) {
+            console.log('[HTTP {e.code}]: {e.message}');
+            res.send(e.message);
+            res.status(e.code).end();
+        }
+        else {
+            console.log("[uploadFile ERROR]: ", e);
+            res.send("[Unexpected error]: " + toString(e));
+            res.status(500).end();
+        }
     }
 }

@@ -28,11 +28,16 @@
                     <div style="display: flex; justify-content: center; block-size: 2rem;">
                         <button style="background-color:rgb(21, 218, 21); width: 15%;" onclick="submitPost()">Post</button>
                     </div>
+                    <div style="padding: 1rem"></div>
+                    <div style="display: flex; justify-content: center; block-size: 1.8rem;">
+                        <button style="background-color:rgb(150, 150, 150); width: 18%;" onclick="submitToBase64Url()">To Base64 url</button>
+                    </div>
                 </div>
 
                 <div id="error-text" style="display: flex; justify-content: center; align-items: center;"></div>
             </div>
         </div>
+
         <script>
             let formInput = document.getElementById('form-input');
             let fileName = document.getElementById('file-name-label');
@@ -118,6 +123,32 @@
                 }
 
                 console.log(response);
+            }
+
+            async function submitToBase64Url() {
+                let blob = fileBlobFromClipboard ? fileBlobFromClipboard : fileInput.files[0];
+
+                let reader = new FileReader();
+                reader.readAsDataURL(blob);
+                await new Promise((res) => { 
+                    reader.onload = res; 
+                });
+
+                let url = reader.result;
+
+                let statusLabel = document.getElementById('error-text');
+                statusLabel.innerHTML = "Done!";
+                statusLabel.style['background-color'] = "#00ff00";
+                paramMenu.style.display = 'none';
+
+                let href = document.createElement("a");
+                href.href = '#';
+                href.innerText = 'Click here to copy URL';
+                href.onclick = () => {
+                    navigator.clipboard.writeText(url);
+                    return false;
+                };
+                statusLabel.appendChild(href);
             }
         </script>
     </body>
