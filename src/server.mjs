@@ -1,172 +1,161 @@
 import process from 'node:process';
-import 'dotenv/config';
-
-const PORT = process.env.PORT;
-const ENABLE_AUTH = process.env.ENABLE_AUTH;
-const USER = process.env.USER;
-const PASS = process.env.PASS;
-const DATA_DIR = process.env.DATA_DIR;
-
-import {WebServer} from "./web_server.mjs";
-import {buildAuthMidware} from './userauth.mjs';
-import {multipartMidware} from "./multipart.mjs";
-
-import serveStatic from "serve-static";
-
-import {fileTypeFromBuffer} from 'file-type';
-
 import fsAsync from 'node:fs/promises';
 import path from 'node:path';
 
-appStart().then();
+import 'dotenv/config';
 
-// ========= FUNCTION DECLARATIONS:
+import serveStatic from "serve-static";
+import {fileTypeFromBuffer} from 'file-type';
 
-async function appStart() {
-    try {
-        await fsAsync.access(DATA_DIR);
-    } catch (e) {
-        if (e.message.includes("no such file or directory")) {
-            console.error("[ERROR]: data folder is not exists");
-        } else {
-            console.error("[ERROR]: data folder access error [%s]: [%s]", e.name, e.message);
+import {WebServer} from "./web_server.mjs";
+import {buildAuthMiddleware} from './userauth.mjs';
+import {multipartMiddleware} from "./multipart.mjs";
+
+/** @type {number}  */ const PORT = process.env.PORT ? parseInt(process.env.PORT) : 8080;
+/** @type {boolean} */ const ENABLE_AUTH = process.env.ENABLE_AUTH ? process.env.ENABLE_AUTH.toLowerCase() !== 'false' : false;
+/** @type {string}  */ const USER = process.env.LOGIN ?? 'user';
+/** @type {string}  */ const PASS = process.env.PASS ?? 'pass';
+/** @type {string}  */ const DATA_DIR = process.env.DATA_DIR ?? './data/';
+
+tryStartApp().then();
+
+async function tryStartApp() {
+    if (! await isFileOrDirExists(DATA_DIR)) {
+        console.log(`Data folder "${DATA_DIR}" is not exists, creating..`);
+        try {
+            await fsAsync.mkdir(DATA_DIR);
+            console.log(`Folder "${DATA_DIR} created`);
+        } catch (e) {
+            return console.error(`[ERROR]: data folder "${DATA_DIR}" creating error ( [${e.name}]: ${e.message} )\n===Stack Trace===\n${e.stack}`);
         }
-        return;
     }
 
-    var webServer = new WebServer();
-    createWebserverRoutes(webServer);
-    webServer.listen(PORT, () => {
-        console.log(`Server started...`);
-    });
+    try {
+        var webServer = new WebServer();
+        createRoutes(webServer);
+        webServer.listen(PORT, () => {
+            console.log(`HTTP server started at ${PORT}`);
+        }).on('error', (err) => {
+            if (err.code === "EADDRINUSE")
+                console.error(`[ERROR]: Address with port ${PORT} is already in use`);
+            else
+                console.error(`[ERROR]: TCP server throws error with code ${err.code}: ${err.message}`);
+        });
+    } catch (e) {
+        return console.error(`[ERROR]: web server startup error ( [${e.name}]: ${e.message} )\n===Stack Trace===\n${e.stack}`);
+    }
 }
 
-function createWebserverRoutes(webServer) {
-    var htAuth = ENABLE_AUTH ? buildAuthMidware(USER, PASS) : null;
+function createRoutes(webServer) {
+    var baseAuthMw = ENABLE_AUTH ? buildAuthMiddleware(USER, PASS) : null;
 
-    webServer.get("/upload", [htAuth, serveStatic("./public")]);
-    webServer.get('/', [redirectToUploadOrNext, serveStatic(DATA_DIR)]);
+    webServer.get("/upload", [baseAuthMw, serveStatic('./src/public'), errorHandler]);
+    webServer.get('/', [redirectToUploadOrNext, serveStatic(DATA_DIR), errorHandler]);
 
-    webServer.post("/upload", [htAuth, multipartMidware, uploadFilesRoute]);
+    webServer.post("/upload", [baseAuthMw, multipartMiddleware, uploadRoute, errorHandler]);
 }
 
 function redirectToUploadOrNext(req, res, next) {
     if (req.originalUrl === '/')
         return res.redirect('/upload');
-
     next();
 }
 
-async function uploadFilesRoute(req, res) {
-    function HTTPResponse(httpErrCode, message) {
-        this.code = httpErrCode;
-        this.message = message;
-        return this;
-    }
-
-    try {
-        // Input getting and checking
-        if (!req.files || !req.files.file) {
-            throw new HTTPResponse(400, 'File in parameter "file" not attached');
-        }
-
-        let file = req.files.file;
-
-        const reqFolder = req.body["folder"];
-        const reqName = req.body["name"];
-        const reqDontUseExt = req.body["dont-use-ext"];
-
-        var fileDir = '';
-        
-        if (reqFolder) {
-            if (!isValidFolder(reqFolder))
-                throw new HTTPResponse(400, '"folder" parameter is not valid');
-            
-            fileDir = reqFolder;
-        }
-
-        if (!isValidFilename(reqName)) {
-            res.write("Filename is not valid");
-            res.statusCode = 400;
-            res.end();
-            return;
-        }
-        //
-
-        // Checking the folder specified by user is existing
-        if (fileDir !== '') {
-            // todo: duplicate of action above, that i wasn't fixed
-            if (! await isFileExists(path.join(DATA_DIR, fileDir))) {
-                await fsAsync.mkdir(path.join(DATA_DIR, fileDir));
-            }
-        }
-        //
-
-        // Specifying extension suffix
-        let extSuffix = '';
-
-        if (reqDontUseExt === 'false') {
-            let fileTypeInfo = await fileTypeFromBuffer(file.data);
-            if (fileTypeInfo) {
-                extSuffix = '.' + fileTypeInfo.ext;
-            }
-            else if (file.name) {
-                extSuffix = path.extname(file.name);
-            }
-        }
-        //
-
-        // Specifying filename
-        var fileName = reqName;
-
-        if (fileName && fileName !== '') {
-            fileName = fileName + extSuffix;
-
-            if (await isFileExists(path.join(DATA_DIR, fileDir, fileName))) {
-                throw new HTTPResponse(400, "File with given name is exists");
-            }
-        }
-        else {
-            fileName = await getNotExistedRandomFilename(path.join(DATA_DIR, fileDir), extSuffix);
-        }
-        //
-
-        // Saving file
-        await fsAsync.writeFile(path.join(DATA_DIR, fileDir, fileName), file.data);
-        //
-
-        // Sending path to saved file
-        throw new HTTPResponse(200, path.posix.join('/', fileDir, fileName));
-        //
-    }
-    catch (e) {
-        if (e instanceof HTTPResponse) {
-            res.write(e.message);
-            res.statusCode = e.code;
-            res.end();
-        }
-        else {
-            console.error("[uploadFileRoute]:\n", e);
-            res.write("[Unexpected error]: " + e.message);
-            res.statusCode = 500;
-            res.end();
-        }
-    }
+function errorHandler(error, req, res, next) {
+    res.statusCode = 500;
+    res.write("Error: " + error.message);
+    res.end();
 }
 
-function makeId(length) {
-    let result = '';
+async function uploadRoute(req, res) {
+    function closeWithStatus(httpStatus, message) {
+        res.statusCode = httpStatus;
+        res.write(message);
+        res.end();
+    }
+
+    /** dir name where will saved uploaded file (max depth = 1) */
+    var fileDir = '';
+    /** @type {BodyFile} - uploaded file */
+    var file;
+    /** suffix part of filename, e.g. ".png" */
+    var extSuffix = '';
+    /** file name with filed will saved on disk */
+    var fileName = '';
+
+    // Input getting and checking
+    if (!req.files || !req.files.file) {
+        return closeWithStatus(400, '"file" parameter is empty');
+    }
+
+    file = req.files.file;
+
+    const reqFolder = req.body["folder"];
+    const reqName = req.body["name"];
+    const reqDontUseExtSuffix = req.body["dont-use-ext"];
+
+    if (reqFolder) {
+        if (!isValidFolder(reqFolder))
+            return closeWithStatus(400, '"folder" parameter is invalid');
+
+        fileDir = reqFolder;
+    }
+
+    if (!isValidFilename(reqName)) {
+        return closeWithStatus(400, '"name" filename is invalid');
+    }
+
+    if (fileDir !== '') {
+        if (! await isFileOrDirExists(path.join(DATA_DIR, fileDir))) {
+            await fsAsync.mkdir(path.join(DATA_DIR, fileDir));
+        }
+    }
+    //
+
+    // Determine extension suffix
+    if (!reqDontUseExtSuffix) {
+        let fileTypeInfo = await fileTypeFromBuffer(file.data);
+        if (fileTypeInfo) {
+            extSuffix = '.' + fileTypeInfo.ext;
+        }
+        else if (file.name) {
+            extSuffix = path.extname(file.name);
+        }
+    }
+    //
+
+    // Determine name for save with uploaded file
+    if (reqName && reqName !== '') {
+        fileName = reqName + extSuffix;
+
+        if (await isFileOrDirExists(path.join(DATA_DIR, fileDir, fileName))) {
+            return closeWithStatus(400, "File with given name is exists");
+        }
+    }
+    else {
+        fileName = await findNotExistedRandomFilename(path.join(DATA_DIR, fileDir), extSuffix);
+    }
+    //
+
+    // Save file on disk
+    await fsAsync.writeFile(path.join(DATA_DIR, fileDir, fileName), file.data);
+
+    // Send url to saved file
+    return closeWithStatus(200, path.posix.join('/', fileDir, fileName));
+}
+
+/** @returns {string} */
+function genRndId(length) {
     const characters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
-    const charactersLength = characters.length;
-    let counter = 0;
-    while (counter < length) {
-        result += characters.charAt(Math.floor(Math.random() * charactersLength));
-        counter += 1;
+    var result = Array(length);
+    for (let i = 0; i < length; i++) {
+        result[i] = characters.charAt(Math.floor(Math.random() * characters.length));
     }
-    return result;
+    return result.join('');
 }
 
-async function isFileExists(path) {
+/** @returns {Promise<boolean>} */
+async function isFileOrDirExists(path) {
     try {
         await fsAsync.access(path);
         return true;
@@ -181,35 +170,30 @@ async function isFileExists(path) {
     }
 }
 
-async function getNotExistedRandomFilename(folder, fileExtSuffix) {
-    folder = './' + folder;
-
+/** @returns {Promise<string>} */
+async function findNotExistedRandomFilename(folder, fileExtSuffix) {
     var filenames = await fsAsync.readdir(folder);
 
-    while(true) {
-        let randomName = makeId(5) + fileExtSuffix;
-        var isFound = false;
+    genLoop: while(true) {
+        let fileName = genRndId(5) + fileExtSuffix;
 
         for (var name of filenames) {
-            if (name === randomName) {
-                isFound = true;
-                break;
-            }
+            if (name === fileName)
+                continue genLoop;
         }
 
-        if (!isFound)
-            return randomName;
+        return fileName;
     }
 }
 
 function isValidFolder(str) {
-    return  (typeof(str) == 'string' &&
-        str.length < 65 &&
-        str.match(/\W/gm) == null);
+    return ( typeof(str) == 'string' &&
+                str.length < 65 &&
+                str.match(/\W/gm) == null );
 }
 
 function isValidFilename(str) {
-    return  (typeof(str) == 'string' &&
-        str.length < 65 &&
-        str.match(/[^a-zA-Z\d.\-\_]|\.{2,}/gm) == null);
+    return ( typeof(str) == 'string' &&
+                str.length < 65 &&
+                str.match(/[^a-zA-Z\d.\-\_]|\.{2,}|^\.|\.$/gm) == null );
 }

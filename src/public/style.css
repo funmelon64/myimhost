@@ -1,38 +1,15 @@
-:root {
-    --b: #000;
-    --w: #fff;
-  }
-  
-  @media (prefers-color-scheme: dark) {
-    :root {
-      --b: #fff;
-      --w: #000;
-    }
-  }
-  
   body {
-    color: var(--b);
-    background-color: var(--w);
     font-family: 'Ubuntu Mono', monospace;
-    max-width: 720px;
-    margin: 0 auto;
+    margin: 0;
     text-align: center;
+    height: 100vh;
   }
-  
-  main { margin: 4rem 2rem; }
-  a, a:visited { color: var(--b); }
-  img { width: 100%; }
-  .not-found, .bad-mime-type { margin-bottom: 2rem; }
-  .logo pre {
-    display: flex;
-    justify-content: center;
-    text-align: left;
-  }
-  
+
   /* Drag and Drop */
   .drop-area {
     position: relative;
     display: flex;
+    flex-direction: column;
     align-items: center;
     justify-content: center;
     height: 8rem;
@@ -41,28 +18,11 @@
     left: 50%;
     transform: translate(-50%, -50%);
     border: 3px dashed #e1e1e1;
+    width: fit-content;
+    padding-inline: 10rem;
   }
-  .drop-area.dragover { border-color: var(--b); }
-  .param-menu {
-    display: block;
-    align-items: center;
-    justify-content: center;
-    height: 8rem;
-    padding: 25px;
-  }
-  .preview-box {
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    position: absolute;
-    top: 0; 
-    left: 0;
-    bottom: 0;
-    right: 0;
-    margin: auto;
-    width: 70%;
-    height: 70%;
-  }
+  .drop-area.dragover { border-color: black; }
+
   .file-input {
     position: absolute;
     left: 0;
@@ -75,49 +35,94 @@
   }
   .file-input-label {
     display: block;
-    margin-top: 1rem;
   }
-  
-  /* Copy to clipboard */
-  .copy-to-clipboard {
+
+  .prev-and-inputs {
     display: flex;
-    margin: 2rem 0;
-    border: 1px solid var(--b);
+    flex-direction: column;
+    justify-content: center;
+    height: 100%;
   }
-  .copy-to-clipboard input[type=text] {
-    flex: 50%;
-    width: 100%;
-    padding: 12px 20px;
-    border: none;
-    outline: none;
-    background-color: var(--w);
-    color: var(--b);
+
+  .preview-card {
+    display: block;
+    border: 3px dashed #e1e1e1;
   }
-  .copy-to-clipboard button {
-    padding: 12px 20px;
+
+  .preview-card img {
+    max-height: calc(100vh - 120px - 3.5rem);
+    max-width: 90vw;
+    object-fit: contain;
+    border: black solid 1px;
+  }
+  @media (max-height: 450px) {
+    .preview-card img { max-height: calc(100vh - 60px - 3.5rem); }
+  }
+
+  .inputs-container {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+  }
+
+  .input-params {
+    display: flex;
+    justify-content: center;
     margin: 0;
-    min-width: 120px;
-    cursor: pointer;
-    text-align: center;
-    border: none;
-    background-color: var(--b);
-    color: var(--w);
   }
-  
-  /* cURL command */
-  .curl pre {
-    text-align: left;
-    padding: 12px 20px;
-    font-size: 14px;
-    background: var(--b);
-    color: var(--w);
-    overflow-x: auto;
+
+  .input-buttons {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: 20px;
+    align-items: center;
+    flex-grow: 1;
   }
-  
-  /* SVG  */
-  svg {
-    color: var(--b);
+
+  .input-buttons button {
+    display: flex;
+    justify-content: space-evenly;
+    align-items: center;
+    height: 1.5rem;
+    font-size: 1rem;
   }
-  svg path {
-    stroke: currentcolor;
+
+  .submit-button {
+    background-color:rgb(21, 218, 21);
+    width: 120px;
+  }
+
+  .base64-button {
+    background-color:rgb(150, 150, 150);
+    width: 145px;
+  }
+
+  .button-loading-circle {
+    border: 3px solid #f2e7e7; /* Light grey */
+    border-top: 3px solid #109fff; /* Blue */
+    border-radius: 50%;
+    box-sizing: border-box;
+    width: 1.1rem;
+    height: 1.1rem;
+    animation: spin 1.5s linear infinite;
+  }
+
+  @keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+  }
+
+  @media (max-height: 450px) {
+    .input-buttons {
+      flex-direction: row;
+      justify-content: center;
+    }
+  }
+
+  .status-text {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    height: 2rem;
   }

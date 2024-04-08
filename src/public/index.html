@@ -1,155 +1,38 @@
 <html>
     <head>
+        <meta charset="UTF-8">
         <link rel="stylesheet" href="./style.css">
+        <script src="upload.js" defer></script>
     </head>
     <body>
-        <div id="drop-area" class="drop-area" ondragover="dragOverHover();" ondragleave="dragLeave()">
-            <form id="form-input" action="/upload" method="POST" enctype="multipart/form-data">
-                <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24"· fill="none" stroke="#000000" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"><path d="M3 15v4c0 1.1.9 2 2 2h14a2 2 0 0 0 2-2v-4M17 8l-5-5-5 5M12 4.2v10.3"/></svg><br>
-                <label for="file" class="file-input-label"><b> Choose images</b> or drag and drop it here</label>
-                <input id="file-input" class="file-input" type="file" multiple onchange="showParamMenu();" name='file' id='image_web'>
-            </form>
+        <div class="drop-area">
+                <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24"· fill="none" stroke="#000000" stroke-width="1" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M3 15v4c0 1.1.9 2 2 2h14a2 2 0 0 0 2-2v-4M17 8l-5-5-5 5M12 4.2v10.3"/>
+                </svg>
+                <br>
+                <label class="file-input-label"><b> Choose images</b> or drag and drop it here</label>
+                <input class="file-input" type="file">
         </div>
 
-        <div id="preview-box" class="preview-box" style="display: none;">
-            <div style="display: block; width: 100%; height: 100%">
-                <div id="preview" style="display: block; border: 3px dashed #e1e1e1; height: 85%;">
-                    <img id="file-preview" style="width: auto; height: 95%;">
-                    <div id="file-name-label"></div>
+        <div class="prev-and-inputs">
+                <div class="preview-card">
+                    <img id="file-preview">
+                    <div></div>
                 </div>
 
-                <div style="display: block;" id="param-menu" class="param-menu">
-                    <div style="display: flex; justify-content: center;">
-                        <input class="params-folder" placeholder="folder" type="text">
-                        <input class="params-name" placeholder="name" type="text">
-                        <input type="checkbox" id="dont-use-ext" name="dont-use-ext">
-                        <label for="dont-use-ext">Don't use extension</label>
-                    </div>
-                    <div style="display: flex; justify-content: center; block-size: 2rem;">
-                        <button style="background-color:rgb(21, 218, 21); width: 15%;" onclick="submitPost()">Post</button>
-                    </div>
-                    <div style="padding: 1rem"></div>
-                    <div style="display: flex; justify-content: center; block-size: 1.8rem;">
-                        <button style="background-color:rgb(150, 150, 150); width: 18%;" onclick="submitToBase64Url()">To Base64 url</button>
+                <div class="inputs-container">
+                    <form class="input-params">
+                        <input placeholder="folder" type="text" name="folder">
+                        <input placeholder="name" type="text" name="name">
+                        <input type="checkbox" name="dont-use-ext">
+                        <label>Don't use extension</label>
+                    </form>
+                    <div class="input-buttons">
+                        <button class="submit-button">Post<div class="button-loading-circle"></div></button>
+                        <button class="base64-button">To Base64 url<div class="button-loading-circle"></div></button>
                     </div>
                 </div>
-
-                <div id="error-text" style="display: flex; justify-content: center; align-items: center;"></div>
-            </div>
+                <div class="status-text"></div>
         </div>
-
-        <script>
-            let formInput = document.getElementById('form-input');
-            let fileName = document.getElementById('file-name-label');
-            let dropArea = document.getElementById('drop-area');
-            let paramMenu = document.getElementById('param-menu');
-            let fileInput = document.getElementById("file-input");
-            let previewArea = document.getElementById("preview");
-            let previewBox = document.getElementById("preview-box");
-
-            let fileBlobFromClipboard;
-
-            document.addEventListener('paste', async (e) => {
-                try {
-                    let clipboardItems = await navigator.clipboard.read();
-                    console.log(clipboardItems);
-                    for (const imageType of clipboardItems[0].types) {
-                        const blob = await clipboardItems[0].getType(imageType);
-                        console.log(blob);
-                        console.log(URL.createObjectURL(blob));
-                        fileBlobFromClipboard = blob;
-                        showParamMenu();
-                    }
-                } catch (e) {
-                    console.log("clipboard error: ", e.name, e.message);
-                }
-            });
-
-            function dragOverHover() {
-                dropArea.className = "drop-area dragover";
-            }
-
-            function dragLeave() {
-                dropArea.className = "drop-area";
-            }
-
-            function showParamMenu(inputElement) {
-                fileName.innerHTML = '<b>' + fileInput.value + '</b>';
-                dropArea.style.display = "none";
-                previewBox.style.display = "flex";
-
-                let fileBlob;
-                if (fileBlobFromClipboard)
-                    fileBlob = fileBlobFromClipboard;
-                else
-                    fileBlob = fileInput.files[0];
-
-                if (fileBlob.type.includes("image")) {
-                    let filePreview = document.getElementById('file-preview');
-                    filePreview.src = URL.createObjectURL(fileBlob);
-                }
-            }
-
-            async function submitPost() {
-                let paramMenu = document.getElementById('param-menu');
-
-                formData = new FormData(formInput);
-                if (fileBlobFromClipboard)
-                    formData.append('file', fileBlobFromClipboard);
-                formData.append('folder', paramMenu.querySelector('.params-folder').value);
-                formData.append('name', paramMenu.querySelector('.params-name').value);
-                formData.append('dont-use-ext', paramMenu.querySelector('#dont-use-ext').checked);
-
-                let response = await fetch('/upload', {
-                    method: 'POST',
-                    body: formData
-                });
-
-                let errorText = await response.text();
-                let errorLabel = document.getElementById('error-text');
-                errorLabel.innerHTML = errorText;
-
-                if (response.status != 200) {
-                    errorLabel.style['background-color'] = "red";
-                }
-                else {
-                    errorLabel.innerHTML = "Отправлено. URL: ";
-                    errorLabel.style['background-color'] = "#00ff00";
-                    let href = document.createElement("a");
-                    href.href = window.location.origin + errorText;
-                    href.innerText = window.location.origin + errorText;
-                    errorLabel.appendChild(href);
-                    paramMenu.style.display = 'none';
-                }
-
-                console.log(response);
-            }
-
-            async function submitToBase64Url() {
-                let blob = fileBlobFromClipboard ? fileBlobFromClipboard : fileInput.files[0];
-
-                let reader = new FileReader();
-                reader.readAsDataURL(blob);
-                await new Promise((res) => { 
-                    reader.onload = res; 
-                });
-
-                let url = reader.result;
-
-                let statusLabel = document.getElementById('error-text');
-                statusLabel.innerHTML = "Done!";
-                statusLabel.style['background-color'] = "#00ff00";
-                paramMenu.style.display = 'none';
-
-                let href = document.createElement("a");
-                href.href = '#';
-                href.innerText = 'Click here to copy URL';
-                href.onclick = () => {
-                    navigator.clipboard.writeText(url);
-                    return false;
-                };
-                statusLabel.appendChild(href);
-            }
-        </script>
     </body>
 </html>

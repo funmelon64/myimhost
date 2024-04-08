@@ -1,3 +1,5 @@
 node_modules/
 .sync-exclude.lst
-*data/
+*data*/
+.env
+package-lock.json
