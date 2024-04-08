@@ -9,10 +9,11 @@ Simple self-hosted file hosting web site with base auth (for upload only) driven
 Please check file `.example.env` before start server, there are important variables 
 
 ```bash
-git clone https://github.com/myimhost/myimhost.git
+git clone https://github.com/funmelon64/myimhost.git
 cd myimhost
 cp .example.env .env
 # Edit .env to your preference
+npm install
 npm run start
 ```
 
