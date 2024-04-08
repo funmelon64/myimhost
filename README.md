@@ -13,6 +13,7 @@ git clone https://github.com/myimhost/myimhost.git
 cd myimhost
 cp .example.env .env
 # Edit .env to your preference
+npm install
 npm run start
 ```
 
